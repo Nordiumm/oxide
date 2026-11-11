@@ -1,6 +1,7 @@
 //! Oxide - a tiny, local-first Twitch chat bot.
 
 mod auth;
+mod eventsub;
 
 use anyhow::{Context, Result, bail};
 use auth::{AuthClient, REQUIRED_SCOPES, StoredTokens, TokenStore};
@@ -19,6 +20,21 @@ enum Command {
     Auth {
         #[command(subcommand)]
         action: AuthAction,
+    },
+    /// Connect to Twitch chat.
+    Chat {
+        #[command(subcommand)]
+        action: ChatAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ChatAction {
+    /// Listen for messages in your Twitch channel.
+    Listen {
+        /// Twitch application client ID. Can also be set with OXIDE_CLIENT_ID.
+        #[arg(long, env = "OXIDE_CLIENT_ID")]
+        client_id: String,
     },
 }
 
@@ -50,6 +66,7 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Command::Auth { action } => handle_auth(action).await,
+        Command::Chat { action } => handle_chat(action).await,
     }
 }
 
@@ -59,6 +76,49 @@ async fn handle_auth(action: AuthAction) -> Result<()> {
         AuthAction::Status { client_id } => status(&client_id).await,
         AuthAction::Logout { client_id } => logout(&client_id).await,
     }
+}
+
+ 
+async fn handle_chat(action: ChatAction) -> Result<()> {
+    match action {
+        ChatAction::Listen { client_id } => listen(&client_id).await,
+    }
+}
+
+async fn listen(client_id: &str) -> Result<()> {
+    let mut tokens = TokenStore::load(client_id)
+        .await?
+        .context("No Twitch credentials found. Run: oxide auth login")?;
+
+    let auth = AuthClient::new()?;
+    let mut user = auth.validate_token(&tokens.access_token).await?;
+
+    if user.is_none() {
+        println!("The access token expired. Refreshing it...");
+        let refreshed = auth
+            .refresh_token(client_id, &tokens.refresh_token)
+            .await?;
+
+        tokens = StoredTokens {
+            access_token: refreshed.access_token,
+            refresh_token: refreshed.refresh_token,
+            scopes: if refreshed.scope.is_empty() {
+                tokens.scopes
+            } else {
+                refreshed.scope
+            },
+            token_type: refreshed.token_type,
+        };
+        TokenStore::save(client_id, &tokens).await?;
+
+        user = auth.validate_token(&tokens.access_token).await?;
+    }
+
+    let user = user.context("Twitch authentication is invalid. Run login again.")?;
+    validate_identity(&user.client_id, client_id)?;
+    validate_scopes(&user.scopes)?;
+
+    eventsub::listen(client_id, &tokens.access_token, &user.user_id).await
 }
 
 async fn login(client_id: &str) -> Result<()> {
