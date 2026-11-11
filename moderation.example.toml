@@ -1,0 +1,38 @@
+# Oxide conservative chat spam moderation.
+# Moderation is disabled for channels unless enabled = true.
+# DRY RUN IS ON BY DEFAULT: matching messages are logged but not acted on.
+# Change dry_run to false only after reviewing the matches in your terminal.
+
+dry_run = true
+
+[channels.nordiumm]
+enabled = true
+phrases = [
+    "buy twitch viewers",
+    "buy twitch followers",
+    "buy viewers",
+    "buy followers",
+    "viewer bots",
+    "bot viewers",
+    "viewbot",
+    "view bots",
+    "follower bots",
+    "i sell viewers",
+    "we sell viewers",
+]
+
+[channels.ripo5015]
+enabled = true
+phrases = [
+    "buy twitch viewers",
+    "buy twitch followers",
+    "buy viewers",
+    "buy followers",
+    "viewer bots",
+    "bot viewers",
+    "viewbot",
+    "view bots",
+    "follower bots",
+    "i sell viewers",
+    "we sell viewers",
+]
