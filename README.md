@@ -85,7 +85,7 @@ Oxide resolves the channel login to its Twitch user ID, then sends the message t
 
 ## Twitch chat
 
-Listen for messages sent in the authenticated Twitch account's own channel:
+Listen for messages in configured Twitch channels where your authenticated account is the broadcaster or a moderator:
 
 ```powershell
 cargo run -p oxide -- chat listen
@@ -93,19 +93,30 @@ cargo run -p oxide -- chat listen
 
 The listener connects to Twitch EventSub over WebSocket and subscribes to `channel.chat.message`. Incoming chat messages are printed to the terminal. Press Ctrl+C to stop it.
 
-This first EventSub implementation handles the initial session and keepalive messages. Automatic session recovery and multi-channel listening will be added in later milestones.
+Oxide reads enabled channels from `config.toml`. It checks the authenticated account's moderated-channel list before subscribing. Your own channel is also eligible. Channels where your account is not a moderator are skipped completely: Oxide will not listen, respond to commands, send timers, or moderate there.
+
+Create `config.toml` in the repository root using `config.example.toml` as a template:
+
+```toml
+[channels]
+nordiumm = true
+ripo5015 = true
+```
+
+Set a channel to `false` to disable it. The listener currently checks eligibility when it starts, so restart Oxide after changing moderator status or the configuration.
 
 The login requests only these scopes:
 
 - `user:read:chat` - read chat messages.
 - `user:write:chat` - send chat messages.
 - `moderator:manage:banned_users` - ban and unban users where the authenticated account has permission.
+- `user:read:moderated_channels` - check which channels the authenticated account moderates.
 
 Access and refresh tokens are stored in the operating system credential store. Oxide does not write them to a plaintext configuration file or print them to the terminal. Public-client refresh tokens are single-use, so Oxide saves each replacement token immediately after a successful refresh.
 
 ## Configuration
 
-General application configuration will be added in a later milestone. Never commit OAuth tokens, client secrets, or personal configuration files.
+Copy `config.example.toml` to `config.toml` and edit the `[channels]` table. The local `config.toml` is ignored by Git. Never commit OAuth tokens, client secrets, or personal configuration files.
 
 ## Safety
 
