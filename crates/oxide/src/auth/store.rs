@@ -25,8 +25,9 @@ impl TokenStore {
             match entry.get_password() {
                 Ok(value) => Ok(Some(value)),
                 Err(KeyringError::NoEntry) => Ok(None),
-                Err(error) => Err(anyhow::Error::new(error)
-                    .context("could not read credentials from the operating system credential store")),
+                Err(error) => Err(anyhow::Error::new(error).context(
+                    "could not read credentials from the operating system credential store",
+                )),
             }
         })
         .await
@@ -41,8 +42,8 @@ impl TokenStore {
 
     pub async fn save(client_id: &str, tokens: &StoredTokens) -> Result<()> {
         let account = account_name(client_id);
-        let serialized = serde_json::to_string(tokens)
-            .context("could not serialize Twitch credentials")?;
+        let serialized =
+            serde_json::to_string(tokens).context("could not serialize Twitch credentials")?;
 
         task::spawn_blocking(move || {
             let entry = Entry::new(SERVICE_NAME, &account)
@@ -65,8 +66,9 @@ impl TokenStore {
             match entry.delete_credential() {
                 Ok(()) => Ok(true),
                 Err(KeyringError::NoEntry) => Ok(false),
-                Err(error) => Err(anyhow::Error::new(error)
-                    .context("could not remove credentials from the operating system credential store")),
+                Err(error) => Err(anyhow::Error::new(error).context(
+                    "could not remove credentials from the operating system credential store",
+                )),
             }
         })
         .await
