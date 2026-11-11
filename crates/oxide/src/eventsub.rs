@@ -29,6 +29,7 @@ pub async fn listen(
     client_id: &str,
     access_token: &str,
     user_id: &str,
+    user_login: &str,
     channels: &[(String, String)],
     commands: &CommandsConfig,
     moderation: &ModerationConfig,
@@ -102,6 +103,35 @@ pub async fn listen(
         "Connected to {} Twitch channel(s). Press Ctrl+C to stop.",
         channels.len()
     );
+
+    // Announce startup only after every eligible channel subscription succeeds.
+    for (login, broadcaster_id) in channels {
+        let startup_message = format!("[BOT] Started in chat as {user_login} :3");
+        match helix::send_message(
+            client_id,
+            access_token,
+            broadcaster_id,
+            user_id,
+            &startup_message,
+        )
+        .await
+        {
+            Ok(result) if result.is_sent => {
+                println!("[{login}] Sent startup announcement.");
+            }
+            Ok(result) => {
+                let reason = result
+                    .drop_reason
+                    .map(|reason| reason.message)
+                    .unwrap_or_else(|| "Twitch did not send the message.".to_owned());
+                eprintln!("[{login}] Startup announcement was not sent: {reason}");
+            }
+            Err(error) => {
+                eprintln!("[{login}] Could not send startup announcement: {error:#}");
+            }
+        }
+    }
+
     println!("Messages from eligible channels will appear below.");
 
     loop {
