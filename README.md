@@ -91,7 +91,7 @@ Listen for messages in configured Twitch channels where your authenticated accou
 cargo run -p oxide -- chat listen
 ```
 
-The listener connects to Twitch EventSub over WebSocket and subscribes to `channel.chat.message`. Incoming chat messages are printed to the terminal. Press Ctrl+C to stop it.
+The listener connects to Twitch EventSub over WebSocket and subscribes to `channel.chat.message`. Incoming chat messages are printed to the terminal. Configured commands are matched per channel and answered through your authenticated Twitch account. Press Ctrl+C to stop it.
 
 Oxide reads enabled channels from `config.toml`. It checks the authenticated account's moderated-channel list before subscribing. Your own channel is also eligible. Channels where your account is not a moderator are skipped completely: Oxide will not listen, respond to commands, send timers, or moderate there.
 
@@ -117,6 +117,23 @@ Access and refresh tokens are stored in the operating system credential store. O
 ## Configuration
 
 Copy `config.example.toml` to `config.toml` and edit the `[channels]` table. The local `config.toml` is ignored by Git. Never commit OAuth tokens, client secrets, or personal configuration files.
+
+### Chat commands
+
+Copy `commands.example.toml` to `commands.toml` to configure per-channel chat commands. The local `commands.toml` is ignored by Git.
+
+```toml
+[channels.ripo5015.commands.discord]
+response = "Join my Discord: https://discord.gg/example"
+
+[channels.ripo5015.commands.github]
+response = "Check out my GitHub: https://github.com/Nordiumm"
+
+[channels.nordiumm.commands.discord]
+response = "Join my Discord: https://discord.gg/example"
+```
+
+A viewer typing `!discord` in `ripo5015` receives the response configured under that channel. Commands are matched without case sensitivity, and extra words after the command are ignored. Commands are isolated by channel. Missing `commands.toml` means no commands are active. Oxide ignores its own messages to prevent response loops.
 
 ## Safety
 
