@@ -8,6 +8,8 @@ use std::collections::HashSet;
 const SEND_MESSAGE_URL: &str = "https://api.twitch.tv/helix/chat/messages";
 const USERS_URL: &str = "https://api.twitch.tv/helix/users";
 const MODERATED_CHANNELS_URL: &str = "https://api.twitch.tv/helix/moderation/channels";
+const BAN_USER_URL: &str = "https://api.twitch.tv/helix/moderation/bans";
+const DELETE_CHAT_URL: &str = "https://api.twitch.tv/helix/moderation/chat";
 const MAX_MESSAGE_CHARACTERS: usize = 500;
 
 /// Result returned by Twitch after attempting to send a chat message.
@@ -200,6 +202,90 @@ pub async fn send_message(
         .into_iter()
         .next()
         .context("Twitch returned an empty chat message response")
+}
+
+
+#[derive(Serialize)]
+struct BanRequest<'a> {
+    data: BanData<'a>,
+}
+
+#[derive(Serialize)]
+struct BanData<'a> {
+    user_id: &'a str,
+    reason: &'a str,
+}
+
+/// Bans a user from a broadcaster's chat using the authenticated moderator account.
+pub async fn ban_user(
+    client_id: &str,
+    access_token: &str,
+    broadcaster_id: &str,
+    moderator_id: &str,
+    target_user_id: &str,
+    reason: &str,
+) -> Result<()> {
+    let http = build_http_client()?;
+    let response = http
+        .post(BAN_USER_URL)
+        .header("Client-Id", client_id)
+        .bearer_auth(access_token)
+        .query(&[
+            ("broadcaster_id", broadcaster_id),
+            ("moderator_id", moderator_id),
+        ])
+        .json(&BanRequest {
+            data: BanData {
+                user_id: target_user_id,
+                reason,
+            },
+        })
+        .send()
+        .await
+        .context("could not ban the Twitch user")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        bail!("Twitch rejected the ban request (HTTP {status}): {body}");
+    }
+
+    Ok(())
+}
+
+/// Deletes one chat message from a broadcaster's chat.
+pub async fn delete_chat_message(
+    client_id: &str,
+    access_token: &str,
+    broadcaster_id: &str,
+    moderator_id: &str,
+    message_id: &str,
+) -> Result<()> {
+    if message_id.trim().is_empty() {
+        bail!("Cannot delete a chat message without its Twitch message ID.");
+    }
+
+    let http = build_http_client()?;
+    let response = http
+        .delete(DELETE_CHAT_URL)
+        .header("Client-Id", client_id)
+        .bearer_auth(access_token)
+        .query(&[
+            ("broadcaster_id", broadcaster_id),
+            ("moderator_id", moderator_id),
+            ("message_id", message_id),
+        ])
+        .send()
+        .await
+        .context("could not delete the Twitch chat message")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        bail!("Twitch rejected the message deletion (HTTP {status}): {body}");
+    }
+
+    Ok(())
 }
 
 fn build_http_client() -> Result<Client> {
