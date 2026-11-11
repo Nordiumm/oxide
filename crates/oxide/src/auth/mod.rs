@@ -3,7 +3,7 @@
 mod client;
 mod store;
 
-pub use client::AuthClient;
+pub use client::{AuthClient, ValidatedUser};
 pub use store::{StoredTokens, TokenStore};
 
 pub const REQUIRED_SCOPES: &[&str] = &[
