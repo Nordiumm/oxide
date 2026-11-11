@@ -1,0 +1,7 @@
+# Oxide channel configuration
+# Only enabled channels where your authenticated Twitch account is a moderator
+# (or is the broadcaster) will be activated.
+
+[channels]
+nordiumm = true
+ripo5015 = true
