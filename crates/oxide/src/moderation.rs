@@ -11,7 +11,7 @@ fn default_dry_run() -> bool {
     true
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ModerationConfig {
     #[serde(default = "default_dry_run")]
     dry_run: bool,
@@ -25,6 +25,15 @@ struct ChannelModeration {
     enabled: bool,
     #[serde(default)]
     phrases: Vec<String>,
+}
+
+impl Default for ModerationConfig {
+    fn default() -> Self {
+        Self {
+            dry_run: true,
+            channels: BTreeMap::new(),
+        }
+    }
 }
 
 impl ModerationConfig {
