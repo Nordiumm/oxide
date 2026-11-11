@@ -130,7 +130,10 @@ impl AuthClient {
 
             let status = response.status();
             let reason = match response.json::<TwitchError>().await {
-                Ok(body) => body.message.or(body.error).unwrap_or_else(String::new),
+                Ok(body) => match body.message.or(body.error) {
+                    Some(message) => message,
+                    None => String::new(),
+                },
                 Err(_) => String::new(),
             };
 
