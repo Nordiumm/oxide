@@ -75,6 +75,18 @@ cargo run -p oxide -- auth status
 cargo run -p oxide -- auth logout
 ```
 
+## Twitch chat
+
+Listen for messages sent in the authenticated Twitch account's own channel:
+
+```powershell
+cargo run -p oxide -- chat listen
+```
+
+The listener connects to Twitch EventSub over WebSocket and subscribes to `channel.chat.message`. Incoming chat messages are printed to the terminal. Press Ctrl+C to stop it.
+
+This first EventSub implementation handles the initial session and keepalive messages. Automatic session recovery and sending chat messages will be added in later milestones.
+
 The login requests only these scopes:
 
 - `user:read:chat` - read chat messages.
