@@ -182,7 +182,11 @@ impl AuthClient {
             .context("Twitch returned an invalid token validation response")
     }
 
-    pub async fn refresh_token(&self, client_id: &str, refresh_token: &str) -> Result<TokenResponse> {
+    pub async fn refresh_token(
+        &self,
+        client_id: &str,
+        refresh_token: &str,
+    ) -> Result<TokenResponse> {
         let response = self
             .http
             .post(TOKEN_ENDPOINT)
