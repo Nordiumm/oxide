@@ -1,6 +1,7 @@
 //! Oxide - a tiny, local-first Twitch chat bot.
 
 mod auth;
+mod config;
 mod eventsub;
 pub mod helix;
 
