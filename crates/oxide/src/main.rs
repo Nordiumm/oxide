@@ -32,7 +32,7 @@ enum Command {
 
 #[derive(Subcommand)]
 enum ChatAction {
-    /// Listen for messages in your Twitch channel.
+    /// Listen in configured channels where your account is a moderator.
     Listen {
         /// Twitch application client ID. Can also be set with OXIDE_CLIENT_ID.
         #[arg(long, env = "OXIDE_CLIENT_ID")]
