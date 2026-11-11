@@ -1,0 +1,11 @@
+[package]
+name = "oxide"
+version = "0.1.0"
+edition = "2024"
+description = "A tiny, fast, local Twitch chat bot written in Rust."
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "oxide"
+path = "src/main.rs"
