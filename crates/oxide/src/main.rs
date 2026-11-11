@@ -78,7 +78,7 @@ async fn handle_auth(action: AuthAction) -> Result<()> {
     }
 }
 
- 
+
 async fn handle_chat(action: ChatAction) -> Result<()> {
     match action {
         ChatAction::Listen { client_id } => listen(&client_id).await,
@@ -95,9 +95,7 @@ async fn listen(client_id: &str) -> Result<()> {
 
     if user.is_none() {
         println!("The access token expired. Refreshing it...");
-        let refreshed = auth
-            .refresh_token(client_id, &tokens.refresh_token)
-            .await?;
+        let refreshed = auth.refresh_token(client_id, &tokens.refresh_token).await?;
 
         tokens = StoredTokens {
             access_token: refreshed.access_token,
