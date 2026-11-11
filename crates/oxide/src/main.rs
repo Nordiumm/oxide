@@ -4,6 +4,7 @@ mod auth;
 mod config;
 mod commands;
 mod eventsub;
+mod moderation;
 pub mod helix;
 
 use anyhow::{Context, Result, bail};
@@ -166,6 +167,11 @@ async fn listen(client_id: &str) -> Result<()> {
 
     let commands = commands::CommandsConfig::load()?;
     println!("Loaded per-channel chat commands.");
+    let moderation = moderation::ModerationConfig::load()?;
+    println!(
+        "Loaded spam moderation rules ({}).",
+        if moderation.dry_run() { "dry-run mode" } else { "active mode" }
+    );
 
     eventsub::listen(
         client_id,
@@ -174,6 +180,7 @@ async fn listen(client_id: &str) -> Result<()> {
         &user.login,
         &eligible_channels,
         &commands,
+        &moderation,
     )
     .await
 }
