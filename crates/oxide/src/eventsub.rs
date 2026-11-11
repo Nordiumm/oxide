@@ -1,6 +1,6 @@
 //! Twitch EventSub WebSocket connection and chat notifications.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use futures_util::{SinkExt, StreamExt};
@@ -125,6 +125,8 @@ pub async fn listen(
                     }
                     Ok(Some(Ok(Message::Text(text)))) => {
                         if let Some(chat_message) = handle_eventsub_message(text.as_str())? {
+                            // Measure moderation latency from when Oxide receives the EventSub notification.
+                            let message_received_at = Instant::now();
                             println!(
                                 "[{}] {}: {}",
                                 chat_message.channel, chat_message.username, chat_message.text
@@ -156,14 +158,16 @@ pub async fn listen(
                                         .await
                                         {
                                             Ok(()) => println!(
-                                                "[{}] Deleted spam message from {}.",
+                                                "[{}] Deleted spam message from {} (delete completed in {:.3}s).",
                                                 chat_message.channel,
-                                                chat_message.username
+                                                chat_message.username,
+                                                message_received_at.elapsed().as_secs_f64()
                                             ),
                                             Err(error) => eprintln!(
-                                                "[{}] Could not delete message from {}: {error:#}",
+                                                "[{}] Could not delete message from {} after {:.3}s: {error:#}",
                                                 chat_message.channel,
-                                                chat_message.username
+                                                chat_message.username,
+                                                message_received_at.elapsed().as_secs_f64()
                                             ),
                                         }
 
@@ -178,14 +182,16 @@ pub async fn listen(
                                         .await
                                         {
                                             Ok(()) => println!(
-                                                "[{}] Banned spam account {}.",
+                                                "[{}] Banned spam account {} (total time from EventSub receipt: {:.3}s).",
                                                 chat_message.channel,
-                                                chat_message.username
+                                                chat_message.username,
+                                                message_received_at.elapsed().as_secs_f64()
                                             ),
                                             Err(error) => eprintln!(
-                                                "[{}] Could not ban {}: {error:#}",
+                                                "[{}] Could not ban {} after {:.3}s: {error:#}",
                                                 chat_message.channel,
-                                                chat_message.username
+                                                chat_message.username,
+                                                message_received_at.elapsed().as_secs_f64()
                                             ),
                                         }
                                     }
