@@ -16,13 +16,14 @@ const SUBSCRIPTIONS_URL: &str = "https://api.twitch.tv/helix/eventsub/subscripti
 pub async fn listen(client_id: &str, access_token: &str, user_id: &str) -> Result<()> {
     println!("Connecting to Twitch EventSub...");
 
-    let (mut socket, _) = connect_async(EVENTSUB_URL)
+    let (socket, _) = connect_async(EVENTSUB_URL)
         .await
         .context("could not connect to Twitch EventSub")?;
+    let (mut sender, mut receiver) = socket.split();
 
     let welcome = timeout(Duration::from_secs(15), async {
         loop {
-            match socket.next().await {
+            match receiver.next().await {
                 Some(Ok(Message::Text(text))) => {
                     let value: Value = serde_json::from_str(text.as_str())
                         .context("Twitch sent an invalid EventSub message")?;
@@ -33,7 +34,7 @@ pub async fn listen(client_id: &str, access_token: &str, user_id: &str) -> Resul
                     }
                 }
                 Some(Ok(Message::Ping(payload))) => {
-                    socket.send(Message::Pong(payload)).await
+                    sender.send(Message::Pong(payload)).await
                         .context("could not respond to Twitch WebSocket ping")?;
                 }
                 Some(Ok(Message::Close(_))) | None => {
