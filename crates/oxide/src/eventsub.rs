@@ -72,7 +72,7 @@ pub async fn listen(client_id: &str, access_token: &str, user_id: &str) -> Resul
     loop {
         let next_message = timeout(
             Duration::from_secs(keepalive_timeout.saturating_add(5)),
-            socket.next(),
+            receiver.next(),
         );
 
         tokio::select! {
@@ -92,7 +92,7 @@ pub async fn listen(client_id: &str, access_token: &str, user_id: &str) -> Resul
                         handle_eventsub_message(text.as_str())?;
                     }
                     Ok(Some(Ok(Message::Ping(payload)))) => {
-                        socket.send(Message::Pong(payload)).await
+                        sender.send(Message::Pong(payload)).await
                             .context("could not respond to Twitch WebSocket ping")?;
                     }
                     Ok(Some(Ok(Message::Close(_)))) => {
