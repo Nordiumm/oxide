@@ -3,8 +3,8 @@
 mod auth;
 
 use anyhow::{Context, Result, bail};
-use clap::{Parser, Subcommand};
 use auth::{AuthClient, REQUIRED_SCOPES, StoredTokens, TokenStore};
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "oxide", version, about = "A local-first Twitch chat bot")]
@@ -110,9 +110,7 @@ async fn status(client_id: &str) -> Result<()> {
 
     if user.is_none() {
         println!("The access token expired. Refreshing it...");
-        let refreshed = auth
-            .refresh_token(client_id, &tokens.refresh_token)
-            .await?;
+        let refreshed = auth.refresh_token(client_id, &tokens.refresh_token).await?;
 
         // Twitch public-client refresh tokens are single-use. Persist the
         // replacement immediately so a later validation/network error cannot
@@ -172,7 +170,11 @@ fn validate_scopes(granted_scopes: &[String]) -> Result<()> {
     let missing: Vec<&str> = REQUIRED_SCOPES
         .iter()
         .copied()
-        .filter(|required| !granted_scopes.iter().any(|granted| granted.as_str() == *required))
+        .filter(|required| {
+            !granted_scopes
+                .iter()
+                .any(|granted| granted.as_str() == *required)
+        })
         .collect();
 
     if !missing.is_empty() {
