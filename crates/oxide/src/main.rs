@@ -114,14 +114,9 @@ async fn status(client_id: &str) -> Result<()> {
             .refresh_token(client_id, &tokens.refresh_token)
             .await?;
 
-        let validated = auth
-            .validate_token(&refreshed.access_token)
-            .await?
-            .context("Twitch returned a refreshed token that could not be validated")?;
-
-        validate_identity(&validated.client_id, client_id)?;
-        validate_scopes(&validated.scopes)?;
-
+        // Twitch public-client refresh tokens are single-use. Persist the
+        // replacement immediately so a later validation/network error cannot
+        // leave only the now-invalid previous refresh token on disk.
         tokens = StoredTokens {
             access_token: refreshed.access_token,
             refresh_token: refreshed.refresh_token,
@@ -132,8 +127,16 @@ async fn status(client_id: &str) -> Result<()> {
             },
             token_type: refreshed.token_type,
         };
-
         TokenStore::save(client_id, &tokens).await?;
+
+        let validated = auth
+            .validate_token(&tokens.access_token)
+            .await?
+            .context("Twitch returned a refreshed token that could not be validated")?;
+
+        validate_identity(&validated.client_id, client_id)?;
+        validate_scopes(&validated.scopes)?;
+
         user = Some(validated);
         println!("Access token refreshed and new credentials saved.");
     }
