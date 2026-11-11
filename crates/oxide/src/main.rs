@@ -177,7 +177,6 @@ async fn listen(client_id: &str) -> Result<()> {
         client_id,
         &tokens.access_token,
         &user.user_id,
-        &user.login,
         &eligible_channels,
         &commands,
         &moderation,
