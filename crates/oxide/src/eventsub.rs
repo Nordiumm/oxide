@@ -9,15 +9,28 @@ use serde_json::{Value, json};
 use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
+use crate::{commands::CommandsConfig, helix};
+
 const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws";
 const SUBSCRIPTIONS_URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
 
-/// Connects to Twitch EventSub and prints messages from every eligible configured channel.
+/// A chat message received from one of the subscribed channels.
+struct ChatMessage {
+    channel: String,
+    broadcaster_id: String,
+    chatter_id: String,
+    username: String,
+    text: String,
+}
+
+/// Connects to Twitch EventSub and handles messages from eligible configured channels.
 pub async fn listen(
     client_id: &str,
     access_token: &str,
     user_id: &str,
+    user_login: &str,
     channels: &[(String, String)],
+    commands: &CommandsConfig,
 ) -> Result<()> {
     if channels.is_empty() {
         bail!("No enabled channels are eligible. Check config.toml and your moderator permissions.");
@@ -110,7 +123,44 @@ pub async fn listen(
                         return Err(anyhow::Error::new(error).context("EventSub WebSocket error"));
                     }
                     Ok(Some(Ok(Message::Text(text)))) => {
-                        handle_eventsub_message(text.as_str())?;
+                        if let Some(chat_message) = handle_eventsub_message(text.as_str())? {
+                            println!(
+                                "[{}] {}: {}",
+                                chat_message.channel, chat_message.username, chat_message.text
+                            );
+
+                            // Never respond to messages sent by Oxide's own Twitch account.
+                            if !chat_message.chatter_id.is_empty()
+                                && chat_message.chatter_id != user_id
+                            {
+                                if let Some(response) =
+                                    commands.response_for(&chat_message.channel, &chat_message.text)
+                                {
+                                    let result = helix::send_message(
+                                        client_id,
+                                        access_token,
+                                        &chat_message.broadcaster_id,
+                                        user_id,
+                                        response,
+                                    )
+                                    .await?;
+
+                                    if result.is_sent {
+                                        println!(
+                                            "[{}] Oxide: {}",
+                                            chat_message.channel, response
+                                        );
+                                    } else if let Some(reason) = result.drop_reason {
+                                        eprintln!(
+                                            "Twitch did not send Oxide's response in {}: {}",
+                                            chat_message.channel, reason.message
+                                        );
+                                    }
+                                }
+                            } else if chat_message.username.eq_ignore_ascii_case(user_login) {
+                                // The account login is a fallback if Twitch omits the chatter ID.
+                            }
+                        }
                     }
                     Ok(Some(Ok(Message::Ping(payload)))) => {
                         sender.send(Message::Pong(payload)).await
@@ -167,7 +217,8 @@ async fn subscribe_to_chat(
     Ok(())
 }
 
-fn handle_eventsub_message(raw: &str) -> Result<()> {
+/// Parses EventSub messages and returns chat notifications, if present.
+fn handle_eventsub_message(raw: &str) -> Result<Option<ChatMessage>> {
     let message: Value =
         serde_json::from_str(raw).context("Twitch sent an invalid EventSub message")?;
 
@@ -176,30 +227,47 @@ fn handle_eventsub_message(raw: &str) -> Result<()> {
         .and_then(Value::as_str)
         .unwrap_or("unknown")
     {
-        "session_keepalive" => {}
+        "session_keepalive" => Ok(None),
         "notification" => {
             if message
                 .pointer("/metadata/subscription_type")
                 .and_then(Value::as_str)
-                == Some("channel.chat.message")
+                != Some("channel.chat.message")
             {
-                let event = message
-                    .pointer("/payload/event")
-                    .context("chat notification did not contain an event")?;
-                let channel = event
+                return Ok(None);
+            }
+
+            let event = message
+                .pointer("/payload/event")
+                .context("chat notification did not contain an event")?;
+
+            Ok(Some(ChatMessage {
+                channel: event
                     .get("broadcaster_user_name")
                     .and_then(Value::as_str)
-                    .unwrap_or("unknown channel");
-                let username = event
+                    .unwrap_or("unknown channel")
+                    .to_owned(),
+                broadcaster_id: event
+                    .get("broadcaster_user_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                chatter_id: event
+                    .get("chatter_user_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                username: event
                     .get("chatter_user_name")
                     .and_then(Value::as_str)
-                    .unwrap_or("unknown");
-                let text = event
+                    .unwrap_or("unknown")
+                    .to_owned(),
+                text: event
                     .pointer("/message/text")
                     .and_then(Value::as_str)
-                    .unwrap_or("");
-                println!("[{channel}] {username}: {text}");
-            }
+                    .unwrap_or("")
+                    .to_owned(),
+            }))
         }
         "session_reconnect" => {
             bail!(
@@ -213,10 +281,9 @@ fn handle_eventsub_message(raw: &str) -> Result<()> {
         }
         other => {
             eprintln!("Received an unhandled EventSub message: {other}");
+            Ok(None)
         }
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -224,7 +291,7 @@ mod tests {
     use super::handle_eventsub_message;
 
     #[test]
-    fn accepts_chat_notifications() {
+    fn parses_chat_notifications() {
         let message = r#"{
             "metadata": {
                 "message_type": "notification",
@@ -232,18 +299,27 @@ mod tests {
             },
             "payload": {
                 "event": {
+                    "broadcaster_user_id": "channel-123",
+                    "broadcaster_user_name": "ripo5015",
+                    "chatter_user_id": "viewer-456",
                     "chatter_user_name": "viewer",
-                    "message": { "text": "hello Oxide" }
+                    "message": { "text": "!discord" }
                 }
             }
         }"#;
 
-        assert!(handle_eventsub_message(message).is_ok());
+        let parsed = handle_eventsub_message(message)
+            .expect("notification should parse")
+            .expect("chat notification should be returned");
+        assert_eq!(parsed.channel, "ripo5015");
+        assert_eq!(parsed.broadcaster_id, "channel-123");
+        assert_eq!(parsed.chatter_id, "viewer-456");
+        assert_eq!(parsed.text, "!discord");
     }
 
     #[test]
     fn accepts_keepalive_messages() {
         let message = r#"{"metadata":{"message_type":"session_keepalive"},"payload":{}}"#;
-        assert!(handle_eventsub_message(message).is_ok());
+        assert!(handle_eventsub_message(message).expect("keepalive should parse").is_none());
     }
 }
