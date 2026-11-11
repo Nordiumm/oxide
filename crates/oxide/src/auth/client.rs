@@ -129,11 +129,10 @@ impl AuthClient {
             }
 
             let status = response.status();
-            let body = response.json::<TwitchError>().await.unwrap_or(TwitchError {
-                message: None,
-                error: None,
-            });
-            let reason = body.message.or(body.error).unwrap_or_default();
+            let reason = match response.json::<TwitchError>().await {
+                Ok(body) => body.message.or(body.error).unwrap_or_else(String::new),
+                Err(_) => String::new(),
+            };
 
             match (status, reason.as_str()) {
                 (StatusCode::BAD_REQUEST, "authorization_pending") => continue,
