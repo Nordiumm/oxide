@@ -10,4 +10,5 @@ pub const REQUIRED_SCOPES: &[&str] = &[
     "user:read:chat",
     "user:write:chat",
     "moderator:manage:banned_users",
+    "user:read:moderated_channels",
 ];
