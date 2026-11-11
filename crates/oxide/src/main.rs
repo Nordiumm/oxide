@@ -94,6 +94,8 @@ async fn login(client_id: &str) -> Result<()> {
 
     TokenStore::save(client_id, &tokens).await?;
     println!("Authenticated as {}.", user.login);
+    println!("Twitch account ID: {}", user.user_id);
+    println!("Access token lifetime: {} seconds.", response.expires_in);
     println!("Credentials saved in the operating system credential store.");
 
     Ok(())
@@ -111,6 +113,7 @@ async fn status(client_id: &str) -> Result<()> {
     if user.is_none() {
         println!("The access token expired. Refreshing it...");
         let refreshed = auth.refresh_token(client_id, &tokens.refresh_token).await?;
+        println!("Twitch issued a new access token valid for {} seconds.", refreshed.expires_in);
 
         // Twitch public-client refresh tokens are single-use. Persist the
         // replacement immediately so a later validation/network error cannot
@@ -143,6 +146,8 @@ async fn status(client_id: &str) -> Result<()> {
     validate_identity(&user.client_id, client_id)?;
     validate_scopes(&user.scopes)?;
     println!("Connected to Twitch as {}.", user.login);
+    println!("Twitch account ID: {}", user.user_id);
+    println!("Access token validity reported by Twitch: {} seconds.", user.expires_in);
     println!("Granted scopes: {}", user.scopes.join(", "));
 
     Ok(())
