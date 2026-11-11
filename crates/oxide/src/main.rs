@@ -78,7 +78,6 @@ async fn handle_auth(action: AuthAction) -> Result<()> {
     }
 }
 
-
 async fn handle_chat(action: ChatAction) -> Result<()> {
     match action {
         ChatAction::Listen { client_id } => listen(&client_id).await,
