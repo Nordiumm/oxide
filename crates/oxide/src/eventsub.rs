@@ -27,14 +27,18 @@ pub async fn listen(client_id: &str, access_token: &str, user_id: &str) -> Resul
                 Some(Ok(Message::Text(text))) => {
                     let value: Value = serde_json::from_str(text.as_str())
                         .context("Twitch sent an invalid EventSub message")?;
-                    if value.pointer("/metadata/message_type").and_then(Value::as_str)
+                    if value
+                        .pointer("/metadata/message_type")
+                        .and_then(Value::as_str)
                         == Some("session_welcome")
                     {
                         break Ok::<Value, anyhow::Error>(value);
                     }
                 }
                 Some(Ok(Message::Ping(payload))) => {
-                    sender.send(Message::Pong(payload)).await
+                    sender
+                        .send(Message::Pong(payload))
+                        .await
                         .context("could not respond to Twitch WebSocket ping")?;
                 }
                 Some(Ok(Message::Close(_))) | None => {
@@ -171,10 +175,14 @@ fn handle_eventsub_message(raw: &str) -> Result<()> {
             }
         }
         "session_reconnect" => {
-            bail!("Twitch requested an EventSub reconnect. Restart Oxide with oxide chat listen for now.");
+            bail!(
+                "Twitch requested an EventSub reconnect. Restart Oxide with oxide chat listen for now."
+            );
         }
         "revocation" => {
-            bail!("Twitch revoked the EventSub subscription. Check your Twitch authorization and run login again if needed.");
+            bail!(
+                "Twitch revoked the EventSub subscription. Check your Twitch authorization and run login again if needed."
+            );
         }
         other => {
             eprintln!("Received an unhandled EventSub message: {other}");
