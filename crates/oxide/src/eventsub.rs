@@ -29,7 +29,6 @@ pub async fn listen(
     client_id: &str,
     access_token: &str,
     user_id: &str,
-    user_login: &str,
     channels: &[(String, String)],
     commands: &CommandsConfig,
     moderation: &ModerationConfig,
