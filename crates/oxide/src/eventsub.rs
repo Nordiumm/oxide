@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
-use crate::{commands::CommandsConfig, helix};
+use crate::{commands::CommandsConfig, helix, moderation::ModerationConfig};
 
 const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws";
 const SUBSCRIPTIONS_URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
@@ -19,6 +19,7 @@ struct ChatMessage {
     channel: String,
     broadcaster_id: String,
     chatter_id: String,
+    message_id: String,
     username: String,
     text: String,
 }
@@ -31,6 +32,7 @@ pub async fn listen(
     user_login: &str,
     channels: &[(String, String)],
     commands: &CommandsConfig,
+    moderation: &ModerationConfig,
 ) -> Result<()> {
     if channels.is_empty() {
         bail!("No enabled channels are eligible. Check config.toml and your moderator permissions.");
@@ -129,11 +131,66 @@ pub async fn listen(
                                 chat_message.channel, chat_message.username, chat_message.text
                             );
 
-                            // Never respond to messages sent by Oxide's own Twitch account.
+                            // Never moderate or respond to messages from Oxide's own account.
                             if !chat_message.chatter_id.is_empty()
                                 && chat_message.chatter_id != user_id
                             {
-                                if let Some(response) =
+                                if let Some(phrase) = moderation.matching_phrase(
+                                    &chat_message.channel,
+                                    &chat_message.text,
+                                ) {
+                                    if moderation.dry_run() {
+                                        println!(
+                                            "[{}] MODERATION DRY RUN: would delete message and ban {} (matched: {:?})",
+                                            chat_message.channel,
+                                            chat_message.username,
+                                            phrase
+                                        );
+                                    } else {
+                                        match helix::delete_chat_message(
+                                            client_id,
+                                            access_token,
+                                            &chat_message.broadcaster_id,
+                                            user_id,
+                                            &chat_message.message_id,
+                                        )
+                                        .await
+                                        {
+                                            Ok(()) => println!(
+                                                "[{}] Deleted spam message from {}.",
+                                                chat_message.channel,
+                                                chat_message.username
+                                            ),
+                                            Err(error) => eprintln!(
+                                                "[{}] Could not delete message from {}: {error:#}",
+                                                chat_message.channel,
+                                                chat_message.username
+                                            ),
+                                        }
+
+                                        match helix::ban_user(
+                                            client_id,
+                                            access_token,
+                                            &chat_message.broadcaster_id,
+                                            user_id,
+                                            &chat_message.chatter_id,
+                                            "Automated spam: matched a configured moderation phrase",
+                                        )
+                                        .await
+                                        {
+                                            Ok(()) => println!(
+                                                "[{}] Banned spam account {}.",
+                                                chat_message.channel,
+                                                chat_message.username
+                                            ),
+                                            Err(error) => eprintln!(
+                                                "[{}] Could not ban {}: {error:#}",
+                                                chat_message.channel,
+                                                chat_message.username
+                                            ),
+                                        }
+                                    }
+                                } else if let Some(response) =
                                     commands.response_for(&chat_message.channel, &chat_message.text)
                                 {
                                     let result = helix::send_message(
@@ -157,8 +214,6 @@ pub async fn listen(
                                         );
                                     }
                                 }
-                            } else if chat_message.username.eq_ignore_ascii_case(user_login) {
-                                // The account login is a fallback if Twitch omits the chatter ID.
                             }
                         }
                     }
@@ -252,6 +307,11 @@ fn handle_eventsub_message(raw: &str) -> Result<Option<ChatMessage>> {
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_owned(),
+                message_id: event
+                    .get("message_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
                 chatter_id: event
                     .get("chatter_user_id")
                     .and_then(Value::as_str)
@@ -302,6 +362,7 @@ mod tests {
                     "broadcaster_user_id": "channel-123",
                     "broadcaster_user_name": "ripo5015",
                     "chatter_user_id": "viewer-456",
+                    "message_id": "message-789",
                     "chatter_user_name": "viewer",
                     "message": { "text": "!discord" }
                 }
@@ -314,6 +375,7 @@ mod tests {
         assert_eq!(parsed.channel, "ripo5015");
         assert_eq!(parsed.broadcaster_id, "channel-123");
         assert_eq!(parsed.chatter_id, "viewer-456");
+        assert_eq!(parsed.message_id, "message-789");
         assert_eq!(parsed.text, "!discord");
     }
 
