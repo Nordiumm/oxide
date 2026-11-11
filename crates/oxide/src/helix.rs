@@ -3,9 +3,11 @@
 use anyhow::{Context, Result, bail};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 const SEND_MESSAGE_URL: &str = "https://api.twitch.tv/helix/chat/messages";
 const USERS_URL: &str = "https://api.twitch.tv/helix/users";
+const MODERATED_CHANNELS_URL: &str = "https://api.twitch.tv/helix/moderation/channels";
 const MAX_MESSAGE_CHARACTERS: usize = 500;
 
 /// Result returned by Twitch after attempting to send a chat message.
@@ -43,6 +45,70 @@ struct UsersResponse {
 #[derive(Deserialize)]
 struct TwitchUser {
     id: String,
+}
+
+#[derive(Deserialize)]
+struct ModeratedChannelsResponse {
+    data: Vec<ModeratedChannel>,
+    pagination: Pagination,
+}
+
+#[derive(Deserialize)]
+struct ModeratedChannel {
+    broadcaster_id: String,
+}
+
+#[derive(Default, Deserialize)]
+struct Pagination {
+    cursor: Option<String>,
+}
+
+/// Returns every channel where the authenticated user currently has moderator privileges.
+pub async fn moderated_channel_ids(
+    client_id: &str,
+    access_token: &str,
+    user_id: &str,
+) -> Result<HashSet<String>> {
+    let http = build_http_client()?;
+    let mut channels = HashSet::new();
+    let mut cursor: Option<String> = None;
+
+    loop {
+        let mut request = http
+            .get(MODERATED_CHANNELS_URL)
+            .header("Client-Id", client_id)
+            .bearer_auth(access_token)
+            .query(&[("user_id", user_id), ("first", "100")]);
+
+        if let Some(value) = cursor.as_deref() {
+            request = request.query(&[("after", value)]);
+        }
+
+        let response = request
+            .send()
+            .await
+            .context("could not retrieve channels moderated by the authenticated account")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            bail!("Twitch rejected the moderated-channel lookup (HTTP {status}): {body}");
+        }
+
+        let page = response
+            .json::<ModeratedChannelsResponse>()
+            .await
+            .context("Twitch returned an invalid moderated-channel response")?;
+
+        channels.extend(page.data.into_iter().map(|channel| channel.broadcaster_id));
+        cursor = page.pagination.cursor;
+
+        if cursor.is_none() {
+            break;
+        }
+    }
+
+    Ok(channels)
 }
 
 /// Looks up a Twitch account by login name and returns its user ID.
