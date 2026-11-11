@@ -1,0 +1,13 @@
+# Oxide per-channel chat commands.
+# Copy this file to commands.toml and edit the responses.
+# Commands only run in channels enabled in config.toml where your account
+# is the broadcaster or a moderator.
+
+[channels.ripo5015.commands.discord]
+response = "Join my Discord: https://discord.gg/example"
+
+[channels.ripo5015.commands.github]
+response = "Check out my GitHub: https://github.com/Nordiumm"
+
+[channels.nordiumm.commands.discord]
+response = "Join my Discord: https://discord.gg/example"
