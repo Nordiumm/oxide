@@ -2,6 +2,7 @@
 
 mod auth;
 mod eventsub;
+pub mod helix;
 
 use anyhow::{Context, Result, bail};
 use auth::{AuthClient, REQUIRED_SCOPES, StoredTokens, TokenStore};
