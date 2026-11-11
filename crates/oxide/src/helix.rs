@@ -1,10 +1,11 @@
-//! Twitch Helix chat message sending.
+//! Twitch Helix chat message sending and user lookup.
 
 use anyhow::{Context, Result, bail};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 const SEND_MESSAGE_URL: &str = "https://api.twitch.tv/helix/chat/messages";
+const USERS_URL: &str = "https://api.twitch.tv/helix/users";
 const MAX_MESSAGE_CHARACTERS: usize = 500;
 
 /// Result returned by Twitch after attempting to send a chat message.
@@ -34,11 +35,62 @@ struct SendMessageRequest<'a> {
     message: &'a str,
 }
 
+#[derive(Deserialize)]
+struct UsersResponse {
+    data: Vec<TwitchUser>,
+}
+
+#[derive(Deserialize)]
+struct TwitchUser {
+    id: String,
+}
+
+/// Looks up a Twitch account by login name and returns its user ID.
+pub async fn resolve_user_id(
+    client_id: &str,
+    access_token: &str,
+    login: &str,
+) -> Result<String> {
+    let login = login.trim().trim_start_matches('@');
+    if login.is_empty() {
+        bail!("The Twitch channel name cannot be empty.");
+    }
+
+    let http = build_http_client()?;
+    let response = http
+        .get(USERS_URL)
+        .header("Client-Id", client_id)
+        .bearer_auth(access_token)
+        .query(&[("login", login)])
+        .send()
+        .await
+        .context("could not look up the Twitch channel")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        bail!("Twitch rejected the channel lookup (HTTP {status}): {body}");
+    }
+
+    let response = response
+        .json::<UsersResponse>()
+        .await
+        .context("Twitch returned an invalid user lookup response")?;
+
+    response
+        .data
+        .into_iter()
+        .next()
+        .map(|user| user.id)
+        .with_context(|| format!("Twitch channel '{login}' was not found"))
+}
+
 /// Sends a message as the authenticated user to the specified broadcaster's chat.
 ///
 /// The sender ID must belong to the user associated with the access token.
 /// The broadcaster ID identifies the destination channel and may be different
-/// from the sender's user ID.
+/// from the sender's user ID. Twitch still decides whether the account is
+/// permitted to send messages in the destination channel.
 pub async fn send_message(
     client_id: &str,
     access_token: &str,
@@ -56,11 +108,7 @@ pub async fn send_message(
         bail!("The sender user ID cannot be empty.");
     }
 
-    let http = Client::builder()
-        .user_agent(concat!("oxide/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .context("could not initialize the Twitch chat HTTP client")?;
-
+    let http = build_http_client()?;
     let response = http
         .post(SEND_MESSAGE_URL)
         .header("Client-Id", client_id)
@@ -90,6 +138,13 @@ pub async fn send_message(
         .into_iter()
         .next()
         .context("Twitch returned an empty chat message response")
+}
+
+fn build_http_client() -> Result<Client> {
+    Client::builder()
+        .user_agent(concat!("oxide/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .context("could not initialize the Twitch HTTP client")
 }
 
 /// Rejects empty messages and messages longer than Twitch's character limit.
