@@ -37,6 +37,17 @@ enum ChatAction {
         #[arg(long, env = "OXIDE_CLIENT_ID")]
         client_id: String,
     },
+    /// Send a message to a Twitch channel as your authenticated account.
+    Send {
+        /// Twitch application client ID. Can also be set with OXIDE_CLIENT_ID.
+        #[arg(long, env = "OXIDE_CLIENT_ID")]
+        client_id: String,
+        /// Destination channel login name, for example: somechannel.
+        #[arg(long)]
+        channel: String,
+        /// Message to send. Put the message in quotes if it contains spaces.
+        message: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -82,10 +93,15 @@ async fn handle_auth(action: AuthAction) -> Result<()> {
 async fn handle_chat(action: ChatAction) -> Result<()> {
     match action {
         ChatAction::Listen { client_id } => listen(&client_id).await,
+        ChatAction::Send {
+            client_id,
+            channel,
+            message,
+        } => send(&client_id, &channel, &message).await,
     }
 }
 
-async fn listen(client_id: &str) -> Result<()> {
+async fn load_validated_tokens(client_id: &str) -> Result<(StoredTokens, auth::ValidatedUser)> {
     let mut tokens = TokenStore::load(client_id)
         .await?
         .context("No Twitch credentials found. Run: oxide auth login")?;
@@ -116,7 +132,37 @@ async fn listen(client_id: &str) -> Result<()> {
     validate_identity(&user.client_id, client_id)?;
     validate_scopes(&user.scopes)?;
 
+    Ok((tokens, user))
+}
+
+async fn listen(client_id: &str) -> Result<()> {
+    let (tokens, user) = load_validated_tokens(client_id).await?;
     eventsub::listen(client_id, &tokens.access_token, &user.user_id).await
+}
+
+async fn send(client_id: &str, channel: &str, message: &str) -> Result<()> {
+    let (tokens, user) = load_validated_tokens(client_id).await?;
+    let broadcaster_id =
+        helix::resolve_user_id(client_id, &tokens.access_token, channel).await?;
+
+    let result = helix::send_message(
+        client_id,
+        &tokens.access_token,
+        &broadcaster_id,
+        &user.user_id,
+        message,
+    )
+    .await?;
+
+    if result.is_sent {
+        println!("Message sent to {channel}.");
+    } else if let Some(reason) = result.drop_reason {
+        println!("Twitch did not send the message: {}", reason.message);
+    } else {
+        println!("Twitch did not send the message.");
+    }
+
+    Ok(())
 }
 
 async fn login(client_id: &str) -> Result<()> {
