@@ -75,6 +75,14 @@ cargo run -p oxide -- auth status
 cargo run -p oxide -- auth logout
 ```
 
+Send a message to a channel as your authenticated Twitch account:
+
+```powershell
+cargo run -p oxide -- chat send --channel somechannel "Hello chat!"
+```
+
+Oxide resolves the channel login to its Twitch user ID, then sends the message through the official Helix API. Your authenticated account must be permitted to chat in the destination channel.
+
 ## Twitch chat
 
 Listen for messages sent in the authenticated Twitch account's own channel:
@@ -85,7 +93,7 @@ cargo run -p oxide -- chat listen
 
 The listener connects to Twitch EventSub over WebSocket and subscribes to `channel.chat.message`. Incoming chat messages are printed to the terminal. Press Ctrl+C to stop it.
 
-This first EventSub implementation handles the initial session and keepalive messages. Automatic session recovery and sending chat messages will be added in later milestones.
+This first EventSub implementation handles the initial session and keepalive messages. Automatic session recovery and multi-channel listening will be added in later milestones.
 
 The login requests only these scopes:
 
