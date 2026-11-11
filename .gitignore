@@ -1,0 +1,13 @@
+/target/
+**/target/
+
+# Local configuration and secrets
+config.toml
+config.local.toml
+.env
+.env.*
+!.env.example
+
+# Local runtime data
+*.log
+*.jsonl
