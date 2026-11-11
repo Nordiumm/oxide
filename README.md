@@ -2,7 +2,7 @@
 
 A tiny, fast, local-first Twitch chat bot written in Rust. No servers, no accounts to host.
 
-> **Status:** Early development — v0.1 is not ready for production use.
+> **Status:** Early development - v0.1 is not ready for production use.
 
 Oxide is designed to run as a single binary on your own computer. It will use Twitch's official APIs and keep its configuration, credentials, and action logs locally.
 
