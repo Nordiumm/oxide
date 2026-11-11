@@ -12,8 +12,11 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws";
 const SUBSCRIPTIONS_URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
 
-/// Connects to Twitch EventSub and prints messages from the authenticated user's channel.
-pub async fn listen(client_id: &str, access_token: &str, user_id: &str) -> Result<()> {
+/// Connects to Twitch EventSub and prints messages from every eligible configured channel.
+pub async fn listen(client_id: &str, access_token: &str, user_id: &str, channels: &[(String, String)]) -> Result<()> {
+    if channels.is_empty() {
+        bail!("No enabled channels are eligible. Check config.toml and your moderator permissions.");
+    }
     println!("Connecting to Twitch EventSub...");
 
     let (socket, _) = connect_async(EVENTSUB_URL)
@@ -64,10 +67,12 @@ pub async fn listen(client_id: &str, access_token: &str, user_id: &str) -> Resul
         .and_then(Value::as_u64)
         .unwrap_or(10);
 
-    subscribe_to_chat(client_id, access_token, user_id, session_id).await?;
+    for (login, broadcaster_id) in channels {
+        subscribe_to_chat(client_id, access_token, user_id, broadcaster_id, login, session_id).await?;
+    }
 
-    println!("Connected to Twitch chat. Press Ctrl+C to stop.");
-    println!("Messages in your channel will appear below.");
+    println!("Connected to {} Twitch channel(s). Press Ctrl+C to stop.", channels.len());
+    println!("Messages from eligible channels will appear below.");
 
     loop {
         let next_message = timeout(
@@ -111,6 +116,8 @@ async fn subscribe_to_chat(
     client_id: &str,
     access_token: &str,
     user_id: &str,
+    broadcaster_id: &str,
+    channel_login: &str,
     session_id: &str,
 ) -> Result<()> {
     let http = Client::new();
@@ -122,7 +129,7 @@ async fn subscribe_to_chat(
             "type": "channel.chat.message",
             "version": "1",
             "condition": {
-                "broadcaster_user_id": user_id,
+                "broadcaster_user_id": broadcaster_id,
                 "user_id": user_id
             },
             "transport": {
@@ -140,7 +147,7 @@ async fn subscribe_to_chat(
         bail!("Twitch rejected the chat subscription (HTTP {status}): {body}");
     }
 
-    println!("Subscribed to chat messages for your channel.");
+    println!("Subscribed to chat messages for {channel_login}.");
     Ok(())
 }
 
@@ -163,6 +170,10 @@ fn handle_eventsub_message(raw: &str) -> Result<()> {
                 let event = message
                     .pointer("/payload/event")
                     .context("chat notification did not contain an event")?;
+                let channel = event
+                    .get("broadcaster_user_name")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown channel");
                 let username = event
                     .get("chatter_user_name")
                     .and_then(Value::as_str)
@@ -171,7 +182,7 @@ fn handle_eventsub_message(raw: &str) -> Result<()> {
                     .pointer("/message/text")
                     .and_then(Value::as_str)
                     .unwrap_or("");
-                println!("{username}: {text}");
+                println!("[{channel}] {username}: {text}");
             }
         }
         "session_reconnect" => {
