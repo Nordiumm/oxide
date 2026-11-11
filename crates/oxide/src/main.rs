@@ -2,6 +2,7 @@
 
 mod auth;
 mod config;
+mod commands;
 mod eventsub;
 pub mod helix;
 
@@ -163,11 +164,16 @@ async fn listen(client_id: &str) -> Result<()> {
         }
     }
 
+    let commands = commands::CommandsConfig::load()?;
+    println!("Loaded per-channel chat commands.");
+
     eventsub::listen(
         client_id,
         &tokens.access_token,
         &user.user_id,
+        &user.login,
         &eligible_channels,
+        &commands,
     )
     .await
 }
