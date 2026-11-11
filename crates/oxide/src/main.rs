@@ -138,7 +138,38 @@ async fn load_validated_tokens(client_id: &str) -> Result<(StoredTokens, auth::V
 
 async fn listen(client_id: &str) -> Result<()> {
     let (tokens, user) = load_validated_tokens(client_id).await?;
-    eventsub::listen(client_id, &tokens.access_token, &user.user_id).await
+    let config = config::Config::load()?;
+    let enabled_channels = config.enabled_channels().collect::<Vec<_>>();
+
+    if enabled_channels.is_empty() {
+        bail!("No channels are enabled in config.toml.");
+    }
+
+    println!("Checking moderator access for {} enabled channel(s)...", enabled_channels.len());
+    let moderated_ids =
+        helix::moderated_channel_ids(client_id, &tokens.access_token, &user.user_id).await?;
+
+    let mut eligible_channels = Vec::new();
+
+    for login in enabled_channels {
+        let broadcaster_id =
+            helix::resolve_user_id(client_id, &tokens.access_token, login).await?;
+
+        if broadcaster_id == user.user_id || moderated_ids.contains(&broadcaster_id) {
+            println!("Channel {login} is eligible. Activating Oxide.");
+            eligible_channels.push((login.to_owned(), broadcaster_id));
+        } else {
+            println!("Skipping {login}: your authenticated account is not a moderator there.");
+        }
+    }
+
+    eventsub::listen(
+        client_id,
+        &tokens.access_token,
+        &user.user_id,
+        &eligible_channels,
+    )
+    .await
 }
 
 async fn send(client_id: &str, channel: &str, message: &str) -> Result<()> {
