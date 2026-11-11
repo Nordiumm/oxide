@@ -46,11 +46,7 @@ struct TwitchUser {
 }
 
 /// Looks up a Twitch account by login name and returns its user ID.
-pub async fn resolve_user_id(
-    client_id: &str,
-    access_token: &str,
-    login: &str,
-) -> Result<String> {
+pub async fn resolve_user_id(client_id: &str, access_token: &str, login: &str) -> Result<String> {
     let login = login.trim().trim_start_matches('@');
     if login.is_empty() {
         bail!("The Twitch channel name cannot be empty.");
@@ -155,7 +151,9 @@ fn validate_message(message: &str) -> Result<()> {
 
     let character_count = message.chars().count();
     if character_count > MAX_MESSAGE_CHARACTERS {
-        bail!("A Twitch chat message cannot exceed {MAX_MESSAGE_CHARACTERS} characters (received {character_count}).");
+        bail!(
+            "A Twitch chat message cannot exceed {MAX_MESSAGE_CHARACTERS} characters (received {character_count})."
+        );
     }
 
     Ok(())
@@ -193,7 +191,8 @@ mod tests {
 
     #[test]
     fn parses_a_successful_twitch_response() {
-        let response = r#"{"data":[{"message_id":"message-123","is_sent":true,"drop_reason":null}]}"#;
+        let response =
+            r#"{"data":[{"message_id":"message-123","is_sent":true,"drop_reason":null}]}"#;
         let parsed: SendMessageResponse =
             serde_json::from_str(response).expect("response should be valid");
         assert_eq!(parsed.data.len(), 1);
@@ -205,8 +204,7 @@ mod tests {
     #[test]
     fn parses_a_twitch_drop_reason() {
         let reason = r#"{"code":"automod_held","message":"Your message was held for review."}"#;
-        let parsed: DropReason =
-            serde_json::from_str(reason).expect("drop reason should be valid");
+        let parsed: DropReason = serde_json::from_str(reason).expect("drop reason should be valid");
         assert_eq!(parsed.code, "automod_held");
         assert_eq!(parsed.message, "Your message was held for review.");
     }

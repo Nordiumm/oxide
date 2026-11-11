@@ -142,8 +142,7 @@ async fn listen(client_id: &str) -> Result<()> {
 
 async fn send(client_id: &str, channel: &str, message: &str) -> Result<()> {
     let (tokens, user) = load_validated_tokens(client_id).await?;
-    let broadcaster_id =
-        helix::resolve_user_id(client_id, &tokens.access_token, channel).await?;
+    let broadcaster_id = helix::resolve_user_id(client_id, &tokens.access_token, channel).await?;
 
     let result = helix::send_message(
         client_id,
