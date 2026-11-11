@@ -133,7 +133,7 @@ impl AuthClient {
                 Ok(body) => body
                     .message
                     .or(body.error)
-                    .map_or_else(|| String::from("unknown"), |message| message),
+                    .unwrap_or_else(|| String::from("unknown")),
                 Err(_) => String::from("unknown"),
             };
 
