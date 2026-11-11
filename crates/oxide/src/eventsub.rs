@@ -13,7 +13,12 @@ const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws";
 const SUBSCRIPTIONS_URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";
 
 /// Connects to Twitch EventSub and prints messages from every eligible configured channel.
-pub async fn listen(client_id: &str, access_token: &str, user_id: &str, channels: &[(String, String)]) -> Result<()> {
+pub async fn listen(
+    client_id: &str,
+    access_token: &str,
+    user_id: &str,
+    channels: &[(String, String)],
+) -> Result<()> {
     if channels.is_empty() {
         bail!("No enabled channels are eligible. Check config.toml and your moderator permissions.");
     }
@@ -68,10 +73,21 @@ pub async fn listen(client_id: &str, access_token: &str, user_id: &str, channels
         .unwrap_or(10);
 
     for (login, broadcaster_id) in channels {
-        subscribe_to_chat(client_id, access_token, user_id, broadcaster_id, login, session_id).await?;
+        subscribe_to_chat(
+            client_id,
+            access_token,
+            user_id,
+            broadcaster_id,
+            login,
+            session_id,
+        )
+        .await?;
     }
 
-    println!("Connected to {} Twitch channel(s). Press Ctrl+C to stop.", channels.len());
+    println!(
+        "Connected to {} Twitch channel(s). Press Ctrl+C to stop.",
+        channels.len()
+    );
     println!("Messages from eligible channels will appear below.");
 
     loop {
